@@ -145,10 +145,10 @@ mongodb:
   resources:
     requests:
       cpu: "100m"
-      memory: "100Mi"
+      memory: "256Mi"
     limits:
       cpu: "200m"
-      memory: "200Mi"
+      memory: "512Mi"
 
   # Persistent storage (disabled by default for quick testing)
   persistence:
@@ -627,7 +627,7 @@ frontend:
   service:
     type: ClusterIP # Expose publicly (gets Azure Load Balancer IP)
     port: 80 # External port (standard HTTP)
-    targetPort: 80 # Container port
+    targetPort: 8080 # Container port
     # nodePort: 30080               # Optional: For NodePort type
     # loadBalancerIP: ""            # Optional: Reserve specific IP
     annotations: {}
