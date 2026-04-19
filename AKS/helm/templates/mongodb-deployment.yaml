@@ -32,14 +32,15 @@ spec:
   replicas: {{ .Values.mongodb.replicaCount }}
   selector:
     matchLabels:
-      {{- include "roboshop.selectorLabels" . | nindent 6 }}
+      project: roboshop
+      tier: db
       component: {{ .Values.mongodb.name }}
   template:
     metadata:
       labels:
-        {{- include "roboshop.selectorLabels" . | nindent 8 }}
-        component: {{ .Values.mongodb.name }}
+        project: roboshop
         tier: db
+        component: {{ .Values.mongodb.name }}
     spec:
       {{- if .Values.serviceAccount.enabled }}
       serviceAccountName: {{ .Values.serviceAccount.name }}

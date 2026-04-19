@@ -173,7 +173,8 @@ metadata:
 spec:
   type: {{ .Values.rabbitmq.service.type }}
   selector:
-    {{- include "roboshop.selectorLabels" . | nindent 4 }}
+    project: roboshop
+    tier: db
     component: {{ .Values.rabbitmq.name }}
   ports:
     - name: tcp-amqp

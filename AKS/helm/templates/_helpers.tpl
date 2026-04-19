@@ -8,10 +8,4 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{/*
-Selector labels
-*/}}
-{{- define "roboshop.selectorLabels" -}}
-project: roboshop
-tier: backend
-{{- end }}
+
