@@ -13,6 +13,10 @@ cart:
   name: cart
   replicaCount: 1
 
+  serviceAccount:
+    enabled: false
+    name: ""
+
   image:
     repository: chelloju/roboshop-cart
     tag: "2.0"
@@ -53,6 +57,10 @@ catalogue:
   enabled: true
   name: catalogue
   replicaCount: 1
+
+  serviceAccount:
+    enabled: false
+    name: ""
 
   image:
     repository: chelloju/roboshop-catalogue
@@ -120,6 +128,10 @@ mongodb:
   name: mongodb
   replicaCount: 1
 
+  serviceAccount:
+    enabled: false
+    name: ""
+
   image:
     repository: chelloju/roboshop-mongodb
     tag: "1.0"
@@ -169,6 +181,10 @@ mysql:
   enabled: true
   name: mysql
   replicaCount: 1
+
+  serviceAccount:
+    enabled: false
+    name: ""
 
   image:
     repository: chelloju/roboshop-mysql
@@ -236,6 +252,10 @@ payment:
   replicaCount: 1
   stage: "" # Optional: "dev", "staging", "prod"
 
+  serviceAccount:
+    enabled: false
+    name: ""
+
   image:
     repository: chelloju/roboshop-payment
     tag: "2.0"
@@ -293,6 +313,10 @@ rabbitmq:
   enabled: true
   name: rabbitmq
   replicaCount: 1
+
+  serviceAccount:
+    enabled: false
+    name: ""
 
   image:
     repository: rabbitmq
@@ -358,6 +382,10 @@ redis:
   name: redis
   replicaCount: 1
 
+  serviceAccount:
+    enabled: false
+    name: ""
+
   # StatefulSet vs Deployment
   statefulset:
     enabled: true # Use StatefulSet (recommended for Redis)
@@ -418,6 +446,10 @@ shipping:
   enabled: true
   name: shipping
   replicaCount: 1
+
+  serviceAccount:
+    enabled: false
+    name: ""
 
   image:
     repository: chelloju/roboshop-shipping
@@ -500,6 +532,10 @@ user:
   name: user
   replicaCount: 1
 
+  serviceAccount:
+    enabled: false
+    name: ""
+
   image:
     repository: chelloju/roboshop-user
     tag: "2.0"
@@ -552,6 +588,10 @@ frontend:
   enabled: true
   name: frontend
   replicaCount: 1
+
+  serviceAccount:
+    enabled: false
+    name: ""
 
   image:
     repository: chelloju/roboshop-frontend
