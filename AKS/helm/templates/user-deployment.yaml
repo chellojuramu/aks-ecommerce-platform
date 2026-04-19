@@ -1,0 +1,102 @@
+{{- if .Values.user.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.user.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.user.name }}
+data:
+  MONGO: {{ .Values.user.config.mongoEnabled | quote }}
+  MONGO_URL: {{ printf "mongodb://%s:%s/%s" .Values.user.config.mongoHost .Values.user.config.mongoPort .Values.user.config.mongoDatabase | quote }}
+  REDIS_URL: {{ printf "redis://%s:%s" .Values.user.config.redisHost .Values.user.config.redisPort | quote }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.user.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.user.name }}
+spec:
+  replicas: {{ .Values.user.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "roboshop.selectorLabels" . | nindent 6 }}
+      component: {{ .Values.user.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "roboshop.selectorLabels" . | nindent 8 }}
+        component: {{ .Values.user.name }}
+    spec:
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.user.name }}
+          image: "{{ .Values.user.image.repository }}:{{ .Values.user.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.user.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.user.service.targetPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.user.name }}
+          {{- if .Values.user.probes.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.user.service.targetPort }}
+            initialDelaySeconds: {{ .Values.user.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.user.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.user.probes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.user.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.user.probes.liveness.path }}
+              port: {{ .Values.user.service.targetPort }}
+            periodSeconds: {{ .Values.user.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.user.probes.liveness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.user.resources | nindent 12 }}
+      restartPolicy: Always
+      {{- with .Values.user.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.user.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.user.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.user.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.user.name }}
+spec:
+  type: {{ .Values.user.service.type }}
+  selector:
+    {{- include "roboshop.selectorLabels" . | nindent 4 }}
+    component: {{ .Values.user.name }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.user.service.port }}
+      targetPort: http
+{{- end }}

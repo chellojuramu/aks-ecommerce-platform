@@ -1,0 +1,193 @@
+{{- if .Values.rabbitmq.enabled }}
+---
+{{- if .Values.rabbitmq.auth.useSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.rabbitmq.name }}-secret
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.rabbitmq.name }}
+    tier: db
+type: Opaque
+data:
+  {{- if .Values.rabbitmq.auth.existingSecret }}
+  # Reference existing secret (created externally)
+  {{- else }}
+  # Create secret from values (base64 encode)
+  rabbitmq-user: {{ .Values.rabbitmq.auth.username | b64enc | quote }}
+  rabbitmq-pass: {{ .Values.rabbitmq.auth.password | b64enc | quote }}
+  {{- end }}
+{{- end }}
+
+---
+{{- if and .Values.rabbitmq.auth.useSecret (not .Values.rabbitmq.auth.existingSecret) }}
+# ConfigMap only if NOT using credentials (just for documentation)
+# If using Secret, credentials come from Secret, not ConfigMap
+{{- else if not .Values.rabbitmq.auth.useSecret }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.rabbitmq.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.rabbitmq.name }}
+    tier: db
+data:
+  RABBITMQ_DEFAULT_USER: {{ .Values.rabbitmq.auth.username | quote }}
+  RABBITMQ_DEFAULT_PASS: {{ .Values.rabbitmq.auth.password | quote }}
+{{- end }}
+
+---
+{{- if .Values.rabbitmq.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.rabbitmq.name }}-pvc
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.rabbitmq.name }}
+    tier: db
+spec:
+  accessModes:
+    - {{ .Values.rabbitmq.persistence.accessMode }}
+  storageClassName: {{ .Values.rabbitmq.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.rabbitmq.persistence.size }}
+{{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.rabbitmq.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.rabbitmq.name }}
+    tier: db
+spec:
+  replicas: {{ .Values.rabbitmq.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "roboshop.selectorLabels" . | nindent 6 }}
+      component: {{ .Values.rabbitmq.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "roboshop.selectorLabels" . | nindent 8 }}
+        component: {{ .Values.rabbitmq.name }}
+        tier: db
+    spec:
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.rabbitmq.name }}
+          image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+          ports:
+            - name: tcp-amqp
+              containerPort: 5672
+              protocol: TCP
+            - name: http-mgmt
+              containerPort: 15672
+              protocol: TCP
+            {{- if .Values.rabbitmq.clustering.enabled }}
+            - name: tcp-epmd
+              containerPort: 4369
+              protocol: TCP
+            - name: tcp-dist
+              containerPort: 25672
+              protocol: TCP
+            {{- end }}
+          env:
+            {{- if .Values.rabbitmq.auth.useSecret }}
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.auth.existingSecret | default (printf "%s-secret" .Values.rabbitmq.name) }}
+                  key: rabbitmq-user
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.auth.existingSecret | default (printf "%s-secret" .Values.rabbitmq.name) }}
+                  key: rabbitmq-pass
+            {{- else }}
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.rabbitmq.name }}
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.rabbitmq.name }}
+                  key: RABBITMQ_DEFAULT_PASS
+            {{- end }}
+            {{- if .Values.rabbitmq.clustering.enabled }}
+            - name: RABBITMQ_ERLANG_COOKIE
+              value: {{ .Values.rabbitmq.clustering.erlangCookie | quote }}
+            {{- end }}
+          {{- if .Values.rabbitmq.persistence.enabled }}
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: {{ .Values.rabbitmq.persistence.mountPath }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+      {{- if .Values.rabbitmq.persistence.enabled }}
+      volumes:
+        - name: rabbitmq-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.rabbitmq.name }}-pvc
+      {{- end }}
+      restartPolicy: Always
+      {{- with .Values.rabbitmq.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.rabbitmq.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.rabbitmq.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.rabbitmq.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.rabbitmq.name }}
+    tier: db
+spec:
+  type: {{ .Values.rabbitmq.service.type }}
+  selector:
+    {{- include "roboshop.selectorLabels" . | nindent 4 }}
+    component: {{ .Values.rabbitmq.name }}
+  ports:
+    - name: tcp-amqp
+      protocol: TCP
+      port: {{ .Values.rabbitmq.service.amqpPort }}
+      targetPort: tcp-amqp
+    - name: http-mgmt
+      protocol: TCP
+      port: {{ .Values.rabbitmq.service.managementPort }}
+      targetPort: http-mgmt
+    {{- if .Values.rabbitmq.clustering.enabled }}
+    - name: tcp-epmd
+      protocol: TCP
+      port: 4369
+      targetPort: tcp-epmd
+    {{- end }}
+{{- end }}

@@ -1,0 +1,25 @@
+# helm/Chart.yaml
+apiVersion: v2 # Use v2 (modern Helm 3)
+name: roboshop
+version: 1.0.0
+appVersion: "2.0"
+description: Production-grade e-commerce microservices platform on Azure AKS
+type: application
+keywords:
+  - ecommerce
+  - microservices
+  - kubernetes
+  - aks
+  - azure
+  - nodejs
+  - python
+  - java
+  - nginx
+  - helm
+home: https://github.com/chellojuramu/aks-ecommerce-platform
+sources:
+  - https://github.com/chellojuramu/aks-ecommerce-platform
+maintainers:
+  - name: Ramu Chelloju
+    url: https://www.linkedin.com/in/ramuchelloju/
+icon: https://raw.githubusercontent.com/chellojuramu/aks-ecommerce-platform/main/docs/logo.png

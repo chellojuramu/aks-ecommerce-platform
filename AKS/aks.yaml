@@ -1,0 +1,48 @@
+# aks.yaml - Azure Resource Manager Template
+$schema: https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#
+contentVersion: 1.0.0.0
+parameters:
+  clusterName:
+    type: string
+    defaultValue: roboshop
+  location:
+    type: string
+    defaultValue: westus2
+  resourceGroup:
+    type: string
+    defaultValue: ecommerce-demo
+  nodeCount:
+    type: int
+    defaultValue: 2
+  vmSize:
+    type: string
+    defaultValue: Standard_D4ds_v5
+  enableSpot:
+    type: bool
+    defaultValue: true
+resources:
+  - type: Microsoft.ContainerService/managedClusters
+    apiVersion: 2023-05-01
+    name: "[parameters('clusterName')]"
+    location: "[parameters('location')]"
+    properties:
+      kubernetesVersion: "1.28"
+      dnsPrefix: "[concat(parameters('clusterName'), '-dns')]"
+      agentPoolProfiles:
+        - name: spot
+          count: "[parameters('nodeCount')]"
+          vmSize: "[parameters('vmSize')]"
+          osType: Linux
+          mode: User
+          scaleSetPriority: Spot
+          scaleSetEvictionPolicy: Delete
+          spotMaxPrice: -1
+          enableAutoScaling: true
+          minCount: 1
+          maxCount: 5
+      networkProfile:
+        networkPlugin: azure
+        serviceCidr: 10.0.0.0/16
+        dnsServiceIP: 10.0.0.10
+      identity:
+        type: SystemAssigned

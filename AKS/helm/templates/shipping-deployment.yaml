@@ -1,0 +1,125 @@
+{{- if .Values.shipping.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.shipping.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.shipping.name }}
+data:
+  CART_ENDPOINT: {{ printf "%s:%s" .Values.shipping.config.cartHost .Values.shipping.config.cartPort | quote }}
+  DB_HOST: {{ .Values.shipping.config.dbHost | quote }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.shipping.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.shipping.name }}
+spec:
+  replicas: {{ .Values.shipping.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "roboshop.selectorLabels" . | nindent 6 }}
+      component: {{ .Values.shipping.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "roboshop.selectorLabels" . | nindent 8 }}
+        component: {{ .Values.shipping.name }}
+      {{- if .Values.shipping.annotations }}
+      annotations:
+        {{- toYaml .Values.shipping.annotations | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.shipping.name }}
+          image: "{{ .Values.shipping.image.repository }}:{{ .Values.shipping.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.shipping.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.shipping.service.targetPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.shipping.name }}
+          {{- if .Values.shipping.jvm.enabled }}
+          env:
+            - name: JAVA_OPTS
+              value: {{ .Values.shipping.jvm.options | quote }}
+          {{- end }}
+          {{- if .Values.shipping.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.shipping.probes.startup.path }}
+              port: {{ .Values.shipping.service.targetPort }}
+            failureThreshold: {{ .Values.shipping.probes.startup.failureThreshold }}
+            periodSeconds: {{ .Values.shipping.probes.startup.periodSeconds }}
+          {{- end }}
+          {{- if .Values.shipping.probes.readiness.enabled }}
+          readinessProbe:
+            {{- if eq .Values.shipping.probes.readiness.type "httpGet" }}
+            httpGet:
+              path: {{ .Values.shipping.probes.readiness.path }}
+              port: {{ .Values.shipping.service.targetPort }}
+            {{- else }}
+            tcpSocket:
+              port: {{ .Values.shipping.service.targetPort }}
+            {{- end }}
+            initialDelaySeconds: {{ .Values.shipping.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.shipping.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.shipping.probes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.shipping.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.shipping.probes.liveness.path }}
+              port: {{ .Values.shipping.service.targetPort }}
+            initialDelaySeconds: {{ .Values.shipping.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.shipping.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.shipping.probes.liveness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.shipping.resources | nindent 12 }}
+      restartPolicy: Always
+      {{- with .Values.shipping.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.shipping.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.shipping.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.shipping.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.shipping.name }}
+spec:
+  type: {{ .Values.shipping.service.type }}
+  selector:
+    {{- include "roboshop.selectorLabels" . | nindent 4 }}
+    component: {{ .Values.shipping.name }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.shipping.service.port }}
+      targetPort: http
+{{- end }}

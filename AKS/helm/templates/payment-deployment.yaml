@@ -1,0 +1,157 @@
+{{- if .Values.payment.enabled }}
+---
+{{- if .Values.payment.auth.useSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.payment.name }}-secret
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.payment.name }}
+type: Opaque
+data:
+  {{- if .Values.payment.auth.existingSecret }}
+  # Reference existing secret (created externally)
+  {{- else }}
+  # Create secret from values (base64 encode)
+  amqp-user: {{ .Values.payment.auth.amqpUser | b64enc | quote }}
+  amqp-pass: {{ .Values.payment.auth.amqpPass | b64enc | quote }}
+  {{- end }}
+{{- end }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.payment.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.payment.name }}
+data:
+  CART_HOST: {{ .Values.payment.config.cartHost | quote }}
+  CART_PORT: {{ .Values.payment.config.cartPort | quote }}
+  USER_HOST: {{ .Values.payment.config.userHost | quote }}
+  USER_PORT: {{ .Values.payment.config.userPort | quote }}
+  AMQP_HOST: {{ .Values.payment.config.amqpHost | quote }}
+  {{- if not .Values.payment.auth.useSecret }}
+  # Only add credentials to ConfigMap if NOT using Secret
+  AMQP_USER: {{ .Values.payment.auth.amqpUser | quote }}
+  AMQP_PASS: {{ .Values.payment.auth.amqpPass | quote }}
+  {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.payment.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.payment.name }}
+    {{- if .Values.payment.stage }}
+    stage: {{ .Values.payment.stage }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.payment.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "roboshop.selectorLabels" . | nindent 6 }}
+      component: {{ .Values.payment.name }}
+      {{- if .Values.payment.stage }}
+      stage: {{ .Values.payment.stage }}
+      {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "roboshop.selectorLabels" . | nindent 8 }}
+        component: {{ .Values.payment.name }}
+        {{- if .Values.payment.stage }}
+        stage: {{ .Values.payment.stage }}
+        {{- end }}
+    spec:
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.payment.name }}
+          image: "{{ .Values.payment.image.repository }}:{{ .Values.payment.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.payment.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.payment.service.targetPort }}
+              protocol: TCP
+          env:
+            {{- if .Values.payment.gateway }}
+            - name: PAYMENT_GATEWAY
+              value: {{ .Values.payment.gateway | quote }}
+            {{- end }}
+            {{- if .Values.payment.auth.useSecret }}
+            # Get RabbitMQ credentials from Secret
+            - name: AMQP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.payment.auth.existingSecret | default (printf "%s-secret" .Values.payment.name) }}
+                  key: amqp-user
+            - name: AMQP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.payment.auth.existingSecret | default (printf "%s-secret" .Values.payment.name) }}
+                  key: amqp-pass
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.payment.name }}
+          {{- if .Values.payment.probes.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.payment.service.targetPort }}
+            initialDelaySeconds: {{ .Values.payment.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.payment.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.payment.probes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.payment.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.payment.probes.liveness.path }}
+              port: {{ .Values.payment.service.targetPort }}
+            periodSeconds: {{ .Values.payment.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.payment.probes.liveness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.payment.resources | nindent 12 }}
+      restartPolicy: Always
+      {{- with .Values.payment.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.payment.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.payment.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.payment.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "roboshop.labels" . | nindent 4 }}
+    component: {{ .Values.payment.name }}
+spec:
+  type: {{ .Values.payment.service.type }}
+  selector:
+    {{- include "roboshop.selectorLabels" . | nindent 4 }}
+    component: {{ .Values.payment.name }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.payment.service.port }}
+      targetPort: http
+{{- end }}

@@ -1,0 +1,639 @@
+#Global settings
+
+namespace: roboshop
+
+#service Account (optional)
+serviceAccount:
+  enabled: false
+  name: roboshop-sa
+
+# Cart Service
+cart:
+  enabled: true
+  name: cart
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-cart
+    tag: "2.0"
+    pullPolicy: Always
+
+  config:
+    redisHost: "redis"
+    catalogueHost: "catalogue"
+    cataloguePort: "8080"
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+
+  probes:
+    readiness:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      failureThreshold: 2
+    liveness:
+      enabled: true
+      path: /health
+      periodSeconds: 10
+      failureThreshold: 2
+
+# Catalogue Service
+catalogue:
+  enabled: true
+  name: catalogue
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-catalogue
+    tag: "2.0"
+    pullPolicy: Always
+
+  config:
+    mongoEnabled: "true"
+    mongoHost: "mongodb"
+    mongoPort: "27017"
+    mongoDatabase: "catalogue"
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+
+  probes:
+    readiness:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      failureThreshold: 2
+    liveness:
+      enabled: true
+      path: /health
+      periodSeconds: 10
+      failureThreshold: 2
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  # Example:
+  # nodeSelector:
+  #   workload: backend
+
+  affinity: {}
+  # Example for HA:
+  # affinity:
+  #   podAntiAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #     - labelSelector:
+  #         matchLabels:
+  #           component: catalogue
+  #       topologyKey: kubernetes.io/hostname
+
+  tolerations: []
+  # Example for spot instances:
+  # tolerations:
+  # - key: "spot"
+  #   operator: "Equal"
+  #   value: "true"
+  #   effect: "NoSchedule"
+
+  # MongoDB Database
+mongodb:
+  enabled: true
+  name: mongodb
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-mongodb
+    tag: "1.0"
+    pullPolicy: IfNotPresent # Don't pull every time (saves time)
+
+  service:
+    type: ClusterIP
+    port: 27017
+    targetPort: 27017
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+    limits:
+      cpu: "200m"
+      memory: "200Mi"
+
+  # Persistent storage (disabled by default for quick testing)
+  persistence:
+    enabled: false # Set to true for production
+    storageClass: "managed-csi" # Azure Disk storage class in AKS
+    accessMode: ReadWriteOnce
+    size: 10Gi # 10 GB disk
+    mountPath: /data/db # MongoDB data directory
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  # Example: Pin to specific node pool
+  # nodeSelector:
+  #   agentpool: dbpool
+
+  affinity: {}
+  # Example: Anti-affinity with other DB pods
+  # affinity:
+  #   podAntiAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #     - labelSelector:
+  #         matchLabels:
+  #           tier: db
+  #       topologyKey: kubernetes.io/hostname
+
+  tolerations: []
+
+# MySQL Database
+mysql:
+  enabled: true
+  name: mysql
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-mysql
+    tag: "1.0"
+    pullPolicy: IfNotPresent
+
+  # Authentication
+  auth:
+    useSecret: true # Use Secret for password (recommended)
+    existingSecret: "" # Use existing secret (leave empty to auto-create)
+    secretKey: "root-password" # Key name in the secret
+    rootPassword: "RoboShop@1" # Password (used if useSecret=true to create secret, or useSecret=false for plain env var)
+
+  service:
+    type: ClusterIP
+    port: 3306
+    targetPort: 3306
+
+  # Security context (for Istio service mesh)
+  securityContext:
+    enabled: false # Set to true if using Istio
+    capabilities:
+      - NET_ADMIN
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "700Mi" # MySQL needs more memory than MongoDB
+    limits:
+      cpu: "200m"
+      memory: "1024Mi" # 1 GB max (InnoDB buffer pool)
+
+  # Persistent storage (disabled by default for quick testing)
+  persistence:
+    enabled: false # Set to true for production
+    storageClass: "managed-csi" # Azure Disk storage class in AKS
+    accessMode: ReadWriteOnce
+    size: 20Gi # 20 GB disk (MySQL data + logs)
+    mountPath: /var/lib/mysql # MySQL data directory
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  # Example: Pin to database node pool
+  # nodeSelector:
+  #   agentpool: dbpool
+
+  affinity: {}
+  # Example: Anti-affinity with MongoDB
+  # affinity:
+  #   podAntiAffinity:
+  #     preferredDuringSchedulingIgnoredDuringExecution:
+  #     - weight: 100
+  #       podAffinityTerm:
+  #         labelSelector:
+  #           matchLabels:
+  #             component: mongodb
+  #         topologyKey: kubernetes.io/hostname
+
+  tolerations: []
+
+# Payment Service (Python)
+payment:
+  enabled: true
+  name: payment
+  replicaCount: 1
+  stage: "" # Optional: "dev", "staging", "prod"
+
+  image:
+    repository: chelloju/roboshop-payment
+    tag: "2.0"
+    pullPolicy: Always
+
+  # Service dependencies
+  config:
+    cartHost: "cart"
+    cartPort: "8080"
+    userHost: "user"
+    userPort: "8080"
+    amqpHost: "rabbitmq"
+
+  # RabbitMQ authentication
+  auth:
+    useSecret: true # Use Secret for RabbitMQ credentials (recommended)
+    existingSecret: "" # Use existing secret (leave empty to auto-create)
+    amqpUser: "roboshop"
+    amqpPass: "roboshop123" # Password (used to create secret or as plain env if useSecret=false)
+
+  # Optional payment gateway integration
+  gateway: "" # e.g., "stripe", "paypal" (leave empty for mock)
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi" # Python apps may need more memory
+
+  probes:
+    readiness:
+      enabled: true
+      initialDelaySeconds: 20 # Python startup is slower than Node.js
+      periodSeconds: 10
+      failureThreshold: 2
+    liveness:
+      enabled: true
+      path: /health
+      periodSeconds: 10
+      failureThreshold: 2
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  # RabbitMQ Message Queue
+rabbitmq:
+  enabled: true
+  name: rabbitmq
+  replicaCount: 1
+
+  image:
+    repository: rabbitmq
+    tag: "3-management-alpine" # Includes management UI, Alpine Linux (smaller)
+    pullPolicy: IfNotPresent
+
+  # Authentication
+  auth:
+    useSecret: true # Use Secret for credentials (recommended)
+    existingSecret: "" # Use existing secret (leave empty to auto-create)
+    username: "roboshop"
+    password: "roboshop123" # Used to create secret or in ConfigMap if useSecret=false
+
+  service:
+    type: ClusterIP
+    amqpPort: 5672 # AMQP protocol (client connections)
+    managementPort: 15672 # Management UI (web interface)
+
+  # Clustering (optional - for HA setup with multiple RabbitMQ nodes)
+  clustering:
+    enabled: false # Set to true for HA (3+ replicas)
+    erlangCookie: "roboshop-secret-cookie" # Must be same across all nodes
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi" # RabbitMQ + Erlang VM
+    limits:
+      cpu: "200m"
+      memory: "512Mi" # Message queues can grow
+
+  # Persistent storage (disabled by default for quick testing)
+  persistence:
+    enabled: false # Set to true for production
+    storageClass: "managed-csi" # Azure Disk storage class in AKS
+    accessMode: ReadWriteOnce
+    size: 10Gi # Messages + logs
+    mountPath: /var/lib/rabbitmq # RabbitMQ data directory
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  # Example: Pin to messaging node pool
+  # nodeSelector:
+  #   workload: messaging
+
+  affinity: {}
+  # Example: Anti-affinity with databases
+  # affinity:
+  #   podAntiAffinity:
+  #     preferredDuringSchedulingIgnoredDuringExecution:
+  #     - weight: 100
+  #       podAffinityTerm:
+  #         labelSelector:
+  #           matchLabels:
+  #             tier: db
+  #         topologyKey: kubernetes.io/hostname
+
+  tolerations: []
+
+# Redis Cache
+redis:
+  enabled: true
+  name: redis
+  replicaCount: 1
+
+  # StatefulSet vs Deployment
+  statefulset:
+    enabled: true # Use StatefulSet (recommended for Redis)
+    # Set to false to use Deployment (simpler, but no stable identity)
+
+    # Headless service (required for StatefulSet pod DNS)
+  headless: true # clusterIP: None (for StatefulSet)
+  # Set to false for regular ClusterIP service (with Deployment)
+
+  image:
+    repository: redis
+    tag: "7.0" # Latest stable Redis
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP # Only used if headless: false
+    port: 6379
+    targetPort: 6379
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "50Mi" # Redis is memory-efficient
+    limits:
+      cpu: "200m"
+      memory: "100Mi"
+
+  # Persistent storage (enabled by default for StatefulSet)
+  persistence:
+    enabled: true # For StatefulSet: auto-creates PVC per pod
+    storageClass: "managed-csi" # Azure Disk storage class in AKS
+    accessMode: ReadWriteOnce
+    size: 1Gi # 1 GB per pod (cache data)
+    mountPath: /data # Redis data directory
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  # Example: Pin to cache node pool
+  # nodeSelector:
+  #   workload: cache
+
+  affinity: {}
+  # Example: Anti-affinity with other caches
+  # affinity:
+  #   podAntiAffinity:
+  #     preferredDuringSchedulingIgnoredDuringExecution:
+  #     - weight: 100
+  #       podAffinityTerm:
+  #         labelSelector:
+  #           matchLabels:
+  #             tier: db
+  #         topologyKey: kubernetes.io/hostname
+
+  tolerations: []
+
+# Shipping Service (Java/Spring Boot)
+shipping:
+  enabled: true
+  name: shipping
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-shipping
+    tag: "2.0"
+    pullPolicy: Always
+
+  # Service dependencies
+  config:
+    cartHost: "cart"
+    cartPort: "8080"
+    dbHost: "mysql"
+
+  # JVM configuration (optional - for tuning)
+  jvm:
+    enabled: false # Set to true to customize JVM options
+    options: "-Xms512m -Xmx800m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    # -Xms512m      = Initial heap size 512 MB
+    # -Xmx800m      = Max heap size 800 MB (leave 200 MB for non-heap)
+    # -XX:+UseG1GC  = Use G1 garbage collector (good for < 4 GB heap)
+    # -XX:MaxGCPauseMillis=200 = Target max GC pause time 200ms
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  # Java apps need MORE memory than Node.js/Python
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "500Mi" # JVM needs at least 500 MB
+    limits:
+      cpu: "200m"
+      memory: "1000Mi" # Allow up to 1 GB (heap + metaspace + threads)
+
+  # Three-probe strategy for Java apps
+  probes:
+    # Startup probe - handles slow JVM/Spring Boot initialization
+    startup:
+      enabled: true
+      path: /health
+      failureThreshold: 30 # 30 × 10s = 300s = 5 minutes max startup
+      periodSeconds: 10
+
+    # Readiness probe - is app ready for traffic?
+    readiness:
+      enabled: true
+      type: "httpGet" # "httpGet" or "tcpSocket"
+      path: /health
+      initialDelaySeconds: 0 # Startup probe handles delay
+      periodSeconds: 5 # Check frequently
+      failureThreshold: 2 # Mark NotReady after 2 failures
+
+    # Liveness probe - is app alive?
+    liveness:
+      enabled: true
+      path: /health
+      initialDelaySeconds: 0 # Startup probe handles delay
+      periodSeconds: 10 # Check every 10s
+      failureThreshold: 3 # Kill after 3 failures (30s)
+
+  # Optional: Pod annotations (e.g., for Prometheus scraping)
+  annotations: {}
+  # prometheus.io/scrape: "true"
+  # prometheus.io/port: "8080"
+  # prometheus.io/path: "/actuator/prometheus"
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  # Example: Pin to JVM-optimized nodes
+  # nodeSelector:
+  #   workload: java
+
+  affinity: {}
+  tolerations: []
+
+# User Service (Node.js)
+user:
+  enabled: true
+  name: user
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-user
+    tag: "2.0"
+    pullPolicy: Always
+
+  # Service dependencies
+  config:
+    # MongoDB configuration
+    mongoEnabled: "true"
+    mongoHost: "mongodb"
+    mongoPort: "27017"
+    mongoDatabase: "users"
+
+    # Redis configuration
+    redisHost: "redis"
+    redisPort: "6379"
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+
+  probes:
+    readiness:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      failureThreshold: 2
+    liveness:
+      enabled: true
+      path: /health
+      periodSeconds: 10
+      failureThreshold: 2
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+# Frontend Service (nginx reverse proxy)
+frontend:
+  enabled: true
+  name: frontend
+  replicaCount: 1
+
+  image:
+    repository: chelloju/roboshop-frontend
+    tag: "2.0"
+    pullPolicy: Always
+
+  # nginx configuration
+  nginx:
+    workerProcesses: "auto" # auto = number of CPU cores
+    workerConnections: 1024 # Max connections per worker
+    keepaliveTimeout: 65 # Keep connections alive for 65s
+    errorLogLevel: "notice" # Log level: debug, info, notice, warn, error
+    imagesCacheExpiry: "5s" # Cache static images for 5 seconds
+
+  # Backend service routes
+  routes:
+    catalogue:
+      host: "catalogue"
+      port: "8080"
+    user:
+      host: "user"
+      port: "8080"
+    cart:
+      host: "cart"
+      port: "8080"
+    shipping:
+      host: "shipping"
+      port: "8080"
+    payment:
+      host: "payment"
+      port: "8080"
+
+  service:
+    type: ClusterIP # Expose publicly (gets Azure Load Balancer IP)
+    port: 80 # External port (standard HTTP)
+    targetPort: 80 # Container port
+    # nodePort: 30080               # Optional: For NodePort type
+    # loadBalancerIP: ""            # Optional: Reserve specific IP
+    annotations: {}
+    # Example annotations for Azure:
+    # service.beta.kubernetes.io/azure-load-balancer-resource-group: "ecommerce-demo"
+    # service.beta.kubernetes.io/azure-dns-label-name: "roboshop-demo"
+
+    # End User Monitoring (optional - for Instana/Datadog/etc.)
+  monitoring:
+    enabled: false
+    eumKey: "" # Your monitoring service key
+    eumUrl: "" # Monitoring endpoint URL
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi" # nginx is very lightweight
+
+  probes:
+    readiness:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      failureThreshold: 2
+    liveness:
+      enabled: true
+      path: /
+      periodSeconds: 10
+      failureThreshold: 2
+
+  # Optional: Pod annotations
+  annotations: {}
+
+  # Advanced scheduling (optional - empty by default)
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+ingress:
+  enabled: true # Toggle Ingress on/off  
+  # advanced scheduling (empty by default)
+nodeSelector: {}
+
+affinity: {}
+
+tolerations: []
